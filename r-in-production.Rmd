@@ -1,0 +1,78 @@
+---
+title: "It's Technically Possible to write R in Production"
+author: "Matt Emery"
+date: "March 8, 2019"
+output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## A Disclaimer
+
+ - This is not an invitation to start a language war
+ - R can do things that Python can't
+ - You will encounter data scientists that only know R and that's fine
+
+## Who Am I?
+
+ - A senior data scientist at Imbellus Inc.
+ - I do a lot data engineering work
+
+## Difficulties in Deployment
+
+1. Testability
+2. Reliability
+3. Interopterability
+
+## Testability
+
+ - Most R starts it's life as a one-off script
+ - This code is rarely tested
+ - What's an easy way to test?
+
+```{r}
+horse_kicks <- readr::read_csv("data/VonBort.csv")
+glm(family="poisson")
+```
+
+## Turn Your Code Into a Package
+
+![R Packages by Hadley Wickham](./img/r-packages.png)
+ - Functions go in the `R` directory
+ - Tests go in the `tests` directory
+
+## Package Management
+
+ - The current package manager is more limited than pip/conda
+ - Packrat will break if itself or R gets upgraded
+ - Packrat doesn't handle external dependancies
+ 
+## Docker
+ 
+```
+FROM rocker/tidyverse:latest
+
+RUN R -e "install.packages(c('devtools'), repos = 'http://cran.us.r-project.org')"
+
+ADD ./package /home/rstudio/package
+
+WORKDIR /home/rstudio/package
+
+RUN R -e 'devtools::install_deps(dependencies = TRUE, upgrade = "always")'
+
+RUN R -e 'devtools::install()'
+
+CMD ["Rscript", "~/package/exec/main.R"]
+```
+ 
+## Interopterability
+
+ - The packages that allow communication between R and Python are not ready for prime-time
+
+## Solution
+
+ - Use PlumbR
+
+## Bibliography
