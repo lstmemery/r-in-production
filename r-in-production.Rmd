@@ -1,5 +1,5 @@
 ---
-title: "It's Technically Possible to write R in Production"
+title: "It's Technically Possible to Write R in Production"
 author: "Matt Emery"
 date: "March 8, 2019"
 output: powerpoint_presentation
@@ -11,29 +11,38 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## A Disclaimer
 
+![http://www.luchensill.com/index.php/biographies/2-uncategorised/17-couleur-chair-flesh-color](img/franoisweyergans.jpg)
+
+:::
+
  - This is not an invitation to start a language war
- - R can do things that Python can't
+ - It's easier to do some things in R
  - You will encounter data scientists that only know R and that's fine
+
+:::
 
 ## Who Am I?
 
  - A senior data scientist at Imbellus Inc.
  - I do a lot data engineering work
 
-## Difficulties in Deployment
+## What Makes for Smooth Deployment?
 
 1. Testability
 2. Reliability
 3. Interopterability
+4. Auditability
 
-## Testability
+## Example: Prussian Army Horse Kick Deaths 
 
- - Most R starts it's life as a one-off script
- - This code is rarely tested
- - What's an easy way to test?
+ - Trying to predict the number of times something will happen?
+ - Use a Poisson Regression
+ - A classic Poisson distribution dataset is the number of Prussian soldiers killed by horses
+ - There's no Poisson regression in Sklearn
 
-<!-- Talk about Horse Kicking -->
-```{r}
+## First Pass
+
+```{r, eval = FALSE}
 library(dplyr)
 library(readr)
 horse_kicks <- read_csv("data/VonBort.csv")
@@ -43,46 +52,118 @@ predict_df <- tibble(year = c(1895),
 predict(model, predict_df)
 ```
 
-
-
-<!-- Good enough -->
-
 ## Turn Your Code Into a Package
 
 ![R Packages by Hadley Wickham](./img/r-packages.png)
+
  - Functions go in the `R` directory
  - Tests go in the `tests` directory
+ - Gets you access to many builtin checks for code quality 
 
-## Package Management
+## Reliability
 
- - The current package manager is more limited than pip/conda
- - Packrat will break if itself or R gets upgraded
- - Packrat doesn't handle external dependancies
- 
-## Docker
- 
+- What happens if instead of predicting the "I" corps, I predict the "1st" corps?
+- One errorenous row breaks predictions for the whole data set
+- Strictly enforce checks on the data set
+
+## Checking Code
+
+```{r, eval = FALSE}
+clean_horse_kicks <- function(horse_kick_df) {
+
+  horse_kick_df %>%
+    assertr::verify(
+      assertr::has_all_names("year", "corps") ,
+      error_fun = assertr::error_stop) %>%
+    assertr::assert(
+      assertr::within_bounds(1701, 1919, allow.na = FALSE), 
+      .data$year,
+      error_fun = assertr::warn_report) %>%
+    dplyr::select(.data$year, .data$corps) %>%
+    dplyr::filter(dplyr::between(.data$year, 1701, 1919))
+}
 ```
-FROM rocker/tidyverse:latest
 
-RUN R -e "install.packages(c('devtools'), repos = 'http://cran.us.r-project.org')"
+## Testability
 
-ADD ./package /home/rstudio/package
+ - Most R starts it's life as a one-off script
+ - This code is rarely tested
+ - What's an easy way to test?
 
-WORKDIR /home/rstudio/package
+## Testthat
 
-RUN R -e 'devtools::install_deps(dependencies = TRUE, upgrade = "always")'
+```{r, eval = FALSE}
+test_that("clean_horse_kicks removes bad entries", {
+  test_df <- dplyr::tibble(
+    year = c(1492, 1848, 2019, 1871),
+    corps = c("I", "I", "I", "XXIII")
+  )
+
+  reference_df <- dplyr::tibble(year = c(1848), corps = c("I"))
+
+  expect_equal(
+    expect_warning(clean_horse_kicks(test_df)),
+    reference_df
+  )
+})
+```
+
+## Interopterability
+
+ - The worst bugs of my life have been from trying to call Python from R and vice versa
+ - Since our package is so small, why not turn the package into a microservice?
+ - Plumber to the rescue!
+
+## Defining a Plumber API
+
+```{r, eval = FALSE}
+#* Predict the number of horse kick deaths a soldier suffered in a year
+#*
+#* @json
+#* @post /predict
+predict <- function(req) {
+
+  horse_kick_df <- jsonlite::fromJSON(req$postBody) %>%
+    as_tibble()
+
+  results <- horse_kick_df %>%
+    clean_horse_kicks() %>%
+    predict_horse_kicks()
+
+  jsonlite::toJSON(results, dataframe = "columns")
+}
+```
+
+## Calling the API
+
+```
+curl --data @sample_data.json -X POST  http://localhost:8000/predict
+```
+ - Since it's HTTP you now have prediction without issues
+
+## Auditability
+
+ - Someone asks you why a model from six months ago made a prediction, what would you tell them?
+ - You need to have the exact model, package and dependencies available
+
+## Docker 
+```
+FROM trestletech/plumber
+MAINTAINER Matthew Emery <me@matthewemery.ca>
+
+RUN R -e "install.packages(c('devtools', 'packrat'), repos = 'http://cran.us.r-project.org')"
+
+ADD ./horsekickeR /home/user/horsekickeR
+
+WORKDIR /home/user/horsekickeR
+
+RUN R -e 'devtools::install_deps(dependencies = TRUE, upgrade = "never")'
 
 RUN R -e 'devtools::install()'
 
-CMD ["Rscript", "~/package/exec/main.R"]
+EXPOSE 8000
+
+CMD ["Rscript", "exec/plumber.R"]
 ```
- 
-## Interopterability
-
- - The packages that allow communication between R and Python are not ready for prime-time
-
-## Solution
-
- - Use PlumbR
 
 ## Bibliography
