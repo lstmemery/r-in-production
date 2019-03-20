@@ -1,8 +1,9 @@
 ---
 title: "It's Technically Possible to Write R in Production"
 author: "Matt Emery"
-date: "March 8, 2019"
-output: powerpoint_presentation
+date: "March 20, 2019"
+output: 
+  powerpoint_presentation
 ---
 
 ```{r setup, include=FALSE}
@@ -11,60 +12,156 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## A Disclaimer
 
-![http://www.luchensill.com/index.php/biographies/2-uncategorised/17-couleur-chair-flesh-color](img/franoisweyergans.jpg)
-
+:::::: {.columns}
+::: {.column}
+![](img/franoisweyergans.jpg)
 :::
 
- - This is not an invitation to start a language war
+::: {.column}
+ - This is not an invitation to start a language war!
  - It's easier to do some things in R
  - You will encounter data scientists that only know R and that's fine
+
+:::
+::::::
+
+::: notes
+
+ - The guy in this picture is a French immortal, he is appointed by France to decide what is and isn't part of the French language
+ - He gets a cool sword
 
 :::
 
 ## Who Am I?
 
+:::::: {.columns}
+::: {.column}
+![](img/imbellus.jpg)
+:::
+
+::: {.column}
  - A senior data scientist at Imbellus Inc.
  - I do a lot data engineering work
 
+:::
+::::::
+
+::: notes
+
+ - We have the cover story in Bloomberg Businessweek
+
+:::
+
+
 ## What Makes for Smooth Deployment?
 
-1. Testability
-2. Reliability
+1. Reliability
+2. Testability
 3. Interopterability
 4. Auditability
 
+::: notes
+
+ - This is a lot to cover in 5 minutes
+ - There are Python versions of each of the things I'm talking about 
+
+:::
+
 ## Example: Prussian Army Horse Kick Deaths 
 
+:::::: {.columns}
+::: {.column}
+![](img/Poisson_pmf.svg)
+:::
+
+::: {.column}
  - Trying to predict the number of times something will happen?
  - Use a Poisson Regression
  - A classic Poisson distribution dataset is the number of Prussian soldiers killed by horses
- - There's no Poisson regression in Sklearn
+ - There's no Poisson regression in Sci-Kit Learn
+
+:::
+::::::
+
+::: notes
+
+ - Before you jump and use R ask your deployment team if they have any knowledge
+
+:::
+
+## A Look at the Data
+
+```{r, message = FALSE, warning = FALSE}
+library(readr)
+
+horse_kicks <- read_csv("data/VonBort.csv")
+
+knitr::kable(tail(horse_kicks))
+```
+
+::: notes
+
+- We only care about deaths, year and corps
+
+:::
 
 ## First Pass
 
-```{r, eval = FALSE}
+```{r, eval = TRUE, message = FALSE, warning=FALSE}
 library(dplyr)
-library(readr)
-horse_kicks <- read_csv("data/VonBort.csv")
-model <- glm(deaths ~ year + corps, data = horse_kicks, family = "poisson")
-predict_df <- tibble(year = c(1895),
+
+model <- glm(deaths ~ year + corps, 
+             data = horse_kicks, 
+             family = "poisson")
+
+predict_df <- tibble(year = c(1895), 
                      corps = c("I"))
+
 predict(model, predict_df)
 ```
 
+::: notes
+
+ - Don't worry if you are having difficulty reading this
+ - First two lines are imports, then reading in data, building a model
+ - Notice that the prediction here is negative!
+
+:::
+
 ## Turn Your Code Into a Package
 
+:::::: {.columns}
+::: {.column}
 ![R Packages by Hadley Wickham](./img/r-packages.png)
+:::
 
+::: {.column}
  - Functions go in the `R` directory
  - Tests go in the `tests` directory
  - Gets you access to many builtin checks for code quality 
 
+:::
+::::::
+
+::: notes
+
+ - I highly recommend writing anything that will be used more than once as a R package
+
+:::
+
 ## Reliability
 
-- What happens if instead of predicting the "I" corps, I predict the "1st" corps?
-- One errorenous row breaks predictions for the whole data set
+- What happens if instead of predicting the **I** corps, I predict the **1st** corps?
+- One erroneous row breaks predictions for the whole data set
 - Strictly enforce checks on the data set
+
+::: notes
+
+ - We always make assumptions when we build models, you'll need to write them out
+ - A negative result for a Poisson regression may be acceptable when you are fiddling but not in production
+ - A great way to enforce these assumptions are through unit tests
+
+:::
 
 ## Checking Code
 
@@ -72,23 +169,46 @@ predict(model, predict_df)
 clean_horse_kicks <- function(horse_kick_df) {
 
   horse_kick_df %>%
-    assertr::verify(
-      assertr::has_all_names("year", "corps") ,
-      error_fun = assertr::error_stop) %>%
-    assertr::assert(
-      assertr::within_bounds(1701, 1919, allow.na = FALSE), 
+    verify(
+      has_all_names("year", "corps") ,
+      error_fun = error_stop) %>%
+    assert(
+      within_bounds(1701, 1919, allow.na = FALSE), 
       .data$year,
-      error_fun = assertr::warn_report) %>%
-    dplyr::select(.data$year, .data$corps) %>%
-    dplyr::filter(dplyr::between(.data$year, 1701, 1919))
+      error_fun = warn_report) %>%
+    select(.data$year, .data$corps) %>%
+    filter(between(.data$year, 1701, 1919))
 }
 ```
 
+::: notes
+
+ - If you haven't seen tidyverse are before it looks very weird
+ - The %>% means pipe, you can think of it as a "then" operator (i.e. verify THEN assert THEN select THE filter)
+ - The important part is to sanitize your inputs
+
+:::
+
+
 ## Testability
 
+:::::: {.columns}
+::: {.column}
+![](img/testthat_logo.png)
+:::
+
+::: {.column}
  - Most R starts it's life as a one-off script
  - This code is rarely tested
- - What's an easy way to test?
+ **- Deploying untested code is a very bad idea**
+
+:::
+::::::
+
+::: notes
+ - Data science bugs are especially bad because so many of them don't crash the system. Instead you get subtle shifts in behavior and your predictiveness goes down
+:::
+
 
 ## Testthat
 
@@ -108,11 +228,29 @@ test_that("clean_horse_kicks removes bad entries", {
 })
 ```
 
+::: notes
+ - This is roughly equivalent to the xUnit framework
+
+:::
+
+
 ## Interopterability
 
+:::::: {.columns}
+::: {.column}
+![](img/plumber_pipe.png)
+:::
+
+::: {.column}
  - The worst bugs of my life have been from trying to call Python from R and vice versa
  - Since our package is so small, why not turn the package into a microservice?
- - Plumber to the rescue!
+:::
+::::::
+
+::: notes
+- A microservice is a small package separated from other packages
+- This can add complexity to your system
+:::
 
 ## Defining a Plumber API
 
@@ -122,17 +260,21 @@ test_that("clean_horse_kicks removes bad entries", {
 #* @json
 #* @post /predict
 predict <- function(req) {
-
   horse_kick_df <- jsonlite::fromJSON(req$postBody) %>%
     as_tibble()
-
   results <- horse_kick_df %>%
     clean_horse_kicks() %>%
     predict_horse_kicks()
-
   jsonlite::toJSON(results, dataframe = "columns")
 }
 ```
+
+::: notes
+
+This is pretty similar to Flask
+
+:::
+
 
 ## Calling the API
 
@@ -140,11 +282,25 @@ predict <- function(req) {
 curl --data @sample_data.json -X POST  http://localhost:8000/predict
 ```
  - Since it's HTTP you now have prediction without issues
+ 
+::: notes
+- If this needs to be faster you could also use protocol buffers
+- Even faster? Just rewrite the code in C++
+:::
 
 ## Auditability
 
+:::::: {.columns}
+::: {.column}
+![](img/docker.png)
+:::
+
+::: {.column}
  - Someone asks you why a model from six months ago made a prediction, what would you tell them?
  - You need to have the exact model, package and dependencies available
+:::
+::::::
+
 
 ## Docker 
 ```
@@ -152,18 +308,19 @@ FROM trestletech/plumber
 MAINTAINER Matthew Emery <me@matthewemery.ca>
 
 RUN R -e "install.packages(c('devtools', 'packrat'), repos = 'http://cran.us.r-project.org')"
-
 ADD ./horsekickeR /home/user/horsekickeR
-
 WORKDIR /home/user/horsekickeR
-
 RUN R -e 'devtools::install_deps(dependencies = TRUE, upgrade = "never")'
-
 RUN R -e 'devtools::install()'
-
 EXPOSE 8000
 
 CMD ["Rscript", "exec/plumber.R"]
 ```
+
+::: notes
+
+I actually made this, you can check it out on GitHub and DockerHub
+
+:::
 
 ## Bibliography
