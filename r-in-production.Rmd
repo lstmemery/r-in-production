@@ -1,6 +1,6 @@
 ---
 title: "It's Technically Possible to Write R in Production"
-author: "Matt Emery"
+author: "Matt Emery (@lstmemery)"
 date: "March 20, 2019"
 output: 
   powerpoint_presentation
@@ -19,8 +19,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ::: {.column}
  - This is not an invitation to start a language war!
- - It's easier to do some things in R
- - You will encounter data scientists that only know R and that's fine
 
 :::
 ::::::
@@ -32,26 +30,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 :::
 
-## Who Am I?
+## Why R?
 
-:::::: {.columns}
-::: {.column}
-![](img/imbellus.jpg)
-:::
-
-::: {.column}
- - A senior data scientist at Imbellus Inc.
- - I do a lot data engineering work
-
-:::
-::::::
-
-::: notes
-
- - We have the cover story in Bloomberg Businessweek
-
-:::
-
+ - R usually gets statistical packages first
+ - The canonical version of several packages are here
 
 ## What Makes for Smooth Deployment?
 
@@ -63,11 +45,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ::: notes
 
  - This is a lot to cover in 5 minutes
+ - Make sure you understand why you need to do something in R
  - There are Python versions of each of the things I'm talking about 
 
 :::
 
-## Example: Prussian Army Horse Kick Deaths 
+## Example: Poisson Regression
 
 :::::: {.columns}
 ::: {.column}
@@ -77,8 +60,21 @@ knitr::opts_chunk$set(echo = TRUE)
 ::: {.column}
  - Trying to predict the number of times something will happen?
  - Use a Poisson Regression
- - A classic Poisson distribution dataset is the number of Prussian soldiers killed by horses
  - There's no Poisson regression in Sci-Kit Learn
+
+:::
+::::::
+
+## Example: Prussian Army Horse Kick Deaths 
+
+:::::: {.columns}
+::: {.column}
+![Ladislaus Bortkiewicz](img/bortkiewicz.gif)
+:::
+
+::: {.column}
+
+ - A classic Poisson distribution dataset is the number of Prussian soldiers killed by horses
 
 :::
 ::::::
@@ -96,7 +92,7 @@ library(readr)
 
 horse_kicks <- read_csv("data/VonBort.csv")
 
-knitr::kable(tail(horse_kicks))
+tail(horse_kicks)
 ```
 
 ::: notes
@@ -200,7 +196,7 @@ clean_horse_kicks <- function(horse_kick_df) {
 ::: {.column}
  - Most R starts it's life as a one-off script
  - This code is rarely tested
- **- Deploying untested code is a very bad idea**
+ - **Deploying untested code is a very bad idea**
 
 :::
 ::::::
@@ -278,10 +274,7 @@ This is pretty similar to Flask
 
 ## Calling the API
 
-```
-curl --data @sample_data.json -X POST  http://localhost:8000/predict
-```
- - Since it's HTTP you now have prediction without issues
+![](img/demo.gif)
  
 ::: notes
 - If this needs to be faster you could also use protocol buffers
@@ -305,7 +298,6 @@ curl --data @sample_data.json -X POST  http://localhost:8000/predict
 ## Docker 
 ```
 FROM trestletech/plumber
-MAINTAINER Matthew Emery <me@matthewemery.ca>
 
 RUN R -e "install.packages(c('devtools', 'packrat'), repos = 'http://cran.us.r-project.org')"
 ADD ./horsekickeR /home/user/horsekickeR
@@ -313,8 +305,8 @@ WORKDIR /home/user/horsekickeR
 RUN R -e 'devtools::install_deps(dependencies = TRUE, upgrade = "never")'
 RUN R -e 'devtools::install()'
 EXPOSE 8000
-
 CMD ["Rscript", "exec/plumber.R"]
+
 ```
 
 ::: notes
@@ -323,4 +315,9 @@ I actually made this, you can check it out on GitHub and DockerHub
 
 :::
 
-## Bibliography
+## Questions?
+
+https://github.com/lstmemery/r-in-production
+https://github.com/lstmemery/horsekickeR
+https://cloud.docker.com/u/lstmemery/repository/docker/lstmemery/horsekicker
+
