@@ -32,20 +32,38 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Why R?
 
+:::::: {.columns}
+::: {.column}
+![](img/Rlogo.png)
+:::
+
+::: {.column}
  - R usually gets statistical packages first.
  - The canonical version of several packages are here.
 
+:::
+::::::
+
 ## Why Python
 
+:::::: {.columns}
+::: {.column}
+![](img/python-logo-master-v3-TM.png)
+:::
+
+::: {.column}
  - You probably know it already.
  - A strong web development community makes deployment easier.
- - Scikit Learn is really, really good.
+ - Scikit-Learn is really, really good.
+
+:::
+::::::
  
 ## But Really, What Language Do I Choose?
 
- 1. The one that you know best
- 2. The one your team knows best
- 3. The one the community knows best
+ 1. The one that you know best.
+ 2. The one your team knows best.
+ 3. The one the community knows best.
 
 ## What Makes for Smooth Deployment?
 
@@ -97,16 +115,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 :::
 
-## A Look at the Data (R)
-
-```{r, message = FALSE, warning = FALSE}
-library(readr)
-
-horse_kicks <- read_csv("data/VonBort.csv")
-
-tail(horse_kicks)
-```
-
 ## A Look at the Data (Python)
 
 ```{python, engine.path='~/anaconda3/bin/python'}
@@ -123,7 +131,38 @@ print(horse_kicks.tail(5))
 
 :::
 
-## First Pass
+## A Look at the Data (R)
+
+```{r, message = FALSE, warning = FALSE}
+library(readr)
+
+horse_kicks <- read_csv("data/VonBort.csv")
+
+tail(horse_kicks)
+```
+
+## First Pass (Python)
+
+```{python, eval = FALSE}
+df = pd.read_csv("data/VonBort.csv")
+
+PoissonRegressor = partial(GLM, family=Poisson())
+horse_kick_pipeline = make_pipeline(OneHotEncoder(sparse=False),
+                                    SMWrapper(PoissonRegressor, fit_intercept=True))
+
+clean_df = clean_horse_kicks(df)
+
+horse_kick_pipeline.fit(np.asarray(clean_df), np.asarray(df["deaths"]))
+```
+
+::: notes
+
+ - The partial function essentially fills in an argument for you
+ - SMWrapper is a nice helper class that turns Statsmodels into Scikit-Learn models
+
+:::
+
+## First Pass (R)
 
 ```{r, eval = TRUE, message = FALSE, warning=FALSE}
 library(dplyr)
@@ -165,6 +204,7 @@ predict(model, predict_df)
 ::: notes
 
  - I highly recommend writing anything that will be used more than once as a R package
+ - The same for Python
 
 :::
 
@@ -186,17 +226,13 @@ predict(model, predict_df)
 
 ```{python, eval = FALSE}
 def clean_horse_kicks(horse_kick_df: pd.DataFrame) -> pd.DataFrame:
-    prussian_corps = {"G", "I", "II", "III", "IV", "V", "VI",
-                         "VII", "VIII", "IX", "X", "XI", "XIV", "XV"}
+    prussian_corps = {"G", "I", "II", "III", "IV"}
 
     if not {"year", "corps"}.issubset(horse_kick_df.columns):
         missing_columns = {"year", "corps"} - set(horse_kick_df.columns)
         raise MissingColumnException(f"{missing_columns} not in Data Frame.")
-        
-    return horse_kick_df.loc[
-        corps_known & years_in_bounds,
-        ["year", "corps"]
-    ]
+    ...
+    return horse_kick_df.loc[corps_known & years_in_bounds, ["year", "corps"]]
 ```
 
 ## Checking Code (R)
@@ -234,7 +270,7 @@ clean_horse_kicks <- function(horse_kick_df) {
 :::
 
 ::: {.column}
- - Most R starts it's life as a one-off script
+ - A lot of data science code starts it's life as a one-off script
  - This code is rarely tested
  - **Deploying untested code is a very bad idea**
 
@@ -245,6 +281,20 @@ clean_horse_kicks <- function(horse_kick_df) {
  - Data science bugs are especially bad because so many of them don't crash the system. Instead you get subtle shifts in behavior and your predictiveness goes down
 :::
 
+## Pytest
+
+```{python, eval = FALSE}
+def test_clean_horse_kicks():
+    input_df = pd.DataFrame({
+        "year": [1600, 1800, 1900],
+        "corps": ["I", "II", "XVI"],
+        "dummy": list(range(3))
+    })
+    reference_df = pd.DataFrame({"year": [1800], "corps": ["II"]})
+    result_df = clean_horse_kicks(input_df)
+    assert_frame_equal
+        (result_df.reset_index(drop=True), reference_df)
+```
 
 ## Testthat
 
@@ -288,6 +338,28 @@ test_that("clean_horse_kicks removes bad entries", {
 - This can add complexity to your system
 :::
 
+## Defining a Flask API
+
+```{python, eval = FALSE}
+@api.route('/predict')
+class Predict(Resource):
+
+    def post(self):
+        data = request.get_json()
+        df = pd.DataFrame(data)
+
+        clean_df = clean_horse_kicks(df)
+
+        model = joblib.load("model/horse_kick_model.pkl")
+
+        return jsonify(list(model.predict(clean_df).round(3)))
+```
+
+::: notes
+- This uses an addon called flask_restplus
+:::
+
+
 ## Defining a Plumber API
 
 ```{r, eval = FALSE}
@@ -307,7 +379,8 @@ predict <- function(req) {
 
 ::: notes
 
-This is pretty similar to Flask
+ - This is pretty similar to Flask
+ - To make a swagger api in Flask use restplus
 
 :::
 
@@ -335,7 +408,21 @@ This is pretty similar to Flask
 ::::::
 
 
-## Docker 
+## Python Docker
+```
+FROM python:3.6.8
+MAINTAINER Matthew Emery <me@matthewemery.ca>
+EXPOSE 5000
+RUN pip install poetry
+COPY pyproject.* .
+RUN poetry install -n
+COPY horsekickerpy/ horsekickerpy/
+COPY setup.py .
+RUN poetry run python setup.py install
+CMD ["poetry", "run", "python", "horsekickerpy/app.py"]
+```
+
+## R Docker 
 ```
 FROM trestletech/plumber
 
@@ -359,5 +446,6 @@ I actually made this, you can check it out on GitHub and DockerHub
 
 https://github.com/lstmemery/r-in-production
 https://github.com/lstmemery/horsekickeR
+https://github.com/lstmemery/horsekickerpy
 https://cloud.docker.com/u/lstmemery/repository/docker/lstmemery/horsekicker
 
